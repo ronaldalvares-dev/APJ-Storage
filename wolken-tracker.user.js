@@ -9,8 +9,8 @@
 // @grant        GM_xmlhttpRequest
 // @connect      script.google.com
 // @connect      script.googleusercontent.com
-// @updateURL    https://gist.githubusercontent.com/YOUR_USERNAME/raw/wolken-tracker.user.js
-// @downloadURL  https://gist.githubusercontent.com/YOUR_USERNAME/raw/wolken-tracker.user.js
+// @updateURL    https://raw.githubusercontent.com/ronaldalvares-dev/APJ-Storage/main/wolken-tracker.user.js
+// @downloadURL  https://raw.githubusercontent.com/ronaldalvares-dev/APJ-Storage/main/wolken-tracker.user.js
 // ==/UserScript==
 
 (function() {
