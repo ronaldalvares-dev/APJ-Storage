@@ -17,7 +17,13 @@
     'use strict';
 
     const WEBHOOK_URL = "https://script.google.com/a/macros/broadcom.com/s/AKfycbwgDWvnJE83pyRWZCFZlFunzlT2XxoT5lQxzw8_gKQ-PEcAH2kSuyOBfYJBp_z8eM_D/exec";
-    const TARGET_PROMPT_NAME = "KCS Case Owner Responsibilities";
+
+    // ADD YOUR PROMPTS HERE: "data-prompt-id": "Human Readable Name for Google Sheet"
+    const TRACKED_PROMPTS = {
+        "shared_kcs_case_owner_responsibilities": "KCS Case Owner Responsibilities",
+        "shared_neo_resolution_summary_evaluator": "Neo Resolution Summary Evaluator",
+        "shared_process_sentinel": "Process Sentinel"
+    };
 
     let lastSentTime = 0;
 
@@ -136,8 +142,8 @@
         return data;
     }
 
-    // CRITICAL FIX: Add 'clickType' parameter to pass the execution method
-    function sendToSheet(caseData, clickType) {
+    // Pass the executed prompt name into the webhook function
+    function sendToSheet(caseData, clickType, executedPromptName) {
         if (caseData.caseId === "Not Found") {
             console.log("⏭️ [TRACKER] Ignored empty data trigger.");
             return;
@@ -149,7 +155,7 @@
 
         let tseName = getLoggedInUser();
 
-        console.log("📤 [TRACKER] Forwarding scraped data to Google Sheet...", { tse: tseName, method: clickType, ...caseData });
+        console.log(`📤 [TRACKER] Forwarding data to Google Sheet for prompt: ${executedPromptName}...`, { tse: tseName, method: clickType, ...caseData });
         GM_xmlhttpRequest({
             method: "POST",
             url: WEBHOOK_URL,
@@ -157,12 +163,12 @@
             data: JSON.stringify({
                 timestamp: new Date().toISOString(),
                 user: tseName,
-                prompt: "shared_kcs_case_owner_responsibilities",
+                prompt: executedPromptName,
                 caseId: caseData.caseId,
                 createdOn: caseData.createdOn,
                 caseOwner: caseData.caseOwner,
                 status: caseData.status,
-                executionMethod: clickType // Sent to Google Sheet payload
+                executionMethod: clickType
             })
         });
     }
@@ -175,13 +181,18 @@
         let isTitleClick = false;
         let isTargetPromptRow = false;
 
+        let activePromptId = null; // Store which prompt was actually matched
+
+        // 1. Identify buttons purely by DOM attributes
         let targetButton = e.target.closest ? e.target.closest('button') : null;
 
         if (targetButton) {
             let promptId = targetButton.getAttribute('data-prompt-id');
 
-            if (promptId === 'shared_kcs_case_owner_responsibilities') {
+            // Check if the clicked button's ID exists in our tracking list
+            if (promptId && TRACKED_PROMPTS[promptId]) {
                 isTargetPromptRow = true;
+                activePromptId = promptId;
 
                 if (targetButton.classList.contains('prompt-use-btn') || targetButton.classList.contains('ath-personal-use-btn')) {
                     isUseButton = true;
@@ -192,20 +203,35 @@
             }
         }
 
-        let targetCard = e.target.closest ? e.target.closest('[data-id="shared_kcs_case_owner_responsibilities"]') : null;
+        // 2. Identify the surrounding card (Fallback)
+        let targetCard = e.target.closest ? e.target.closest('.ath-personal-row, .ath-prompt-card') : null;
         if (targetCard) {
-            isTargetPromptRow = true;
+            let cardId = targetCard.getAttribute('data-id');
+            if (cardId && TRACKED_PROMPTS[cardId]) {
+                isTargetPromptRow = true;
+                // Only overwrite if we don't already have the active ID
+                if (!activePromptId) activePromptId = cardId;
+            }
         }
 
         let contextHasStoreSignatures = false;
         let contextHasUseBtnText = false;
 
+        // 3. Scan for Title clicks (Shortcuts)
         for (let i = 0; i < Math.min(path.length, 10); i++) {
             let node = path[i];
             if (node && node.nodeType === 1) {
                 let text = (node.innerText || node.textContent || "").trim();
 
-                if (i < 4 && text.includes(TARGET_PROMPT_NAME)) isTitleClick = true;
+                if (i < 4) {
+                    // Check against all tracked prompt names
+                    for (const [id, name] of Object.entries(TRACKED_PROMPTS)) {
+                        if (text.includes(name)) {
+                            isTitleClick = true;
+                            if (!activePromptId) activePromptId = id;
+                        }
+                    }
+                }
                 if (text.includes("Duplicate") || text.includes("FEATURED")) contextHasStoreSignatures = true;
                 if (text.includes("Use") || text.includes("play_arrow")) contextHasUseBtnText = true;
             }
@@ -214,27 +240,27 @@
         let shouldFire = false;
         let clickedMethod = "";
 
-        // Determine exactly which type was clicked
         if (isUseButton && isTargetPromptRow) {
             shouldFire = true;
             clickedMethod = "Use Button";
-            console.log("🎯 [TRACKER] 'Use' list/grid button clicked!");
+            console.log(`🎯 [TRACKER] 'Use' list/grid button clicked for ${TRACKED_PROMPTS[activePromptId]}`);
         }
         else if (isUseThisPromptButton && isTargetPromptRow) {
             shouldFire = true;
             clickedMethod = "Use this Prompt Detail Button";
-            console.log("🎯 [TRACKER] 'Use this Prompt' details button clicked!");
+            console.log(`🎯 [TRACKER] 'Use this Prompt' details button clicked for ${TRACKED_PROMPTS[activePromptId]}`);
         }
-        else if (isTitleClick && !contextHasStoreSignatures && !contextHasUseBtnText) {
+        else if (isTitleClick && !contextHasStoreSignatures && !contextHasUseBtnText && activePromptId) {
             shouldFire = true;
             clickedMethod = "Shortcut Pill";
-            console.log("🎯 [TRACKER] Favorite pill clicked! (Verified outside store)");
+            console.log(`🎯 [TRACKER] Favorite pill clicked! for ${TRACKED_PROMPTS[activePromptId]}`);
         }
 
-        if (shouldFire) {
+        if (shouldFire && activePromptId) {
             setTimeout(() => {
                 let data = scrapePage();
-                sendToSheet(data, clickedMethod); // Pass the method into the webhook
+                let promptName = TRACKED_PROMPTS[activePromptId];
+                sendToSheet(data, clickedMethod, promptName);
             }, 500);
         }
     }, true);
