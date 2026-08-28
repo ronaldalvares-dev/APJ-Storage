@@ -53,7 +53,6 @@
     function cleanCaseId(rawId) {
         if (!rawId || rawId === "Not Found") return "Not Found";
         let cleaned = rawId.replace(/[^\d]/g, '').trim();
-        // If regex strips everything (e.g. it was just an icon), return the raw string so we don't return an empty string
         return cleaned.length > 0 ? cleaned : rawId;
     }
 
@@ -92,7 +91,6 @@
                 let valueEl = parentRow ? parentRow.querySelector('.section-fields-values-ca') : null;
 
                 if (valueEl) {
-                    // CRITICAL FIX: Clone the node and remove icons/buttons before reading the text
                     let clone = valueEl.cloneNode(true);
                     let noiseElements = clone.querySelectorAll('.wtt-icon, .wtt-copy-button, mat-icon');
                     noiseElements.forEach(noise => noise.remove());
@@ -138,8 +136,8 @@
         return data;
     }
 
-    // Webhook Dispatcher
-    function sendToSheet(caseData) {
+    // CRITICAL FIX: Add 'clickType' parameter to pass the execution method
+    function sendToSheet(caseData, clickType) {
         if (caseData.caseId === "Not Found") {
             console.log("⏭️ [TRACKER] Ignored empty data trigger.");
             return;
@@ -151,7 +149,7 @@
 
         let tseName = getLoggedInUser();
 
-        console.log("📤 [TRACKER] Forwarding scraped data to Google Sheet...", { tse: tseName, ...caseData });
+        console.log("📤 [TRACKER] Forwarding scraped data to Google Sheet...", { tse: tseName, method: clickType, ...caseData });
         GM_xmlhttpRequest({
             method: "POST",
             url: WEBHOOK_URL,
@@ -163,7 +161,8 @@
                 caseId: caseData.caseId,
                 createdOn: caseData.createdOn,
                 caseOwner: caseData.caseOwner,
-                status: caseData.status
+                status: caseData.status,
+                executionMethod: clickType // Sent to Google Sheet payload
             })
         });
     }
@@ -213,24 +212,29 @@
         }
 
         let shouldFire = false;
+        let clickedMethod = "";
 
+        // Determine exactly which type was clicked
         if (isUseButton && isTargetPromptRow) {
             shouldFire = true;
+            clickedMethod = "Use Button";
             console.log("🎯 [TRACKER] 'Use' list/grid button clicked!");
         }
         else if (isUseThisPromptButton && isTargetPromptRow) {
             shouldFire = true;
+            clickedMethod = "Use this Prompt Detail Button";
             console.log("🎯 [TRACKER] 'Use this Prompt' details button clicked!");
         }
         else if (isTitleClick && !contextHasStoreSignatures && !contextHasUseBtnText) {
             shouldFire = true;
+            clickedMethod = "Shortcut Pill";
             console.log("🎯 [TRACKER] Favorite pill clicked! (Verified outside store)");
         }
 
         if (shouldFire) {
             setTimeout(() => {
                 let data = scrapePage();
-                sendToSheet(data);
+                sendToSheet(data, clickedMethod); // Pass the method into the webhook
             }, 500);
         }
     }, true);
