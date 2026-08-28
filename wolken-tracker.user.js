@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         APJ Storage Wolken Prompt Tracker
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @description  Differentiates Store Browsing from Execute Actions flawlessly using DOM attributes
 // @match        *://*.wolkenservicedesk.com/*
 // @match        *://broadcomcms-software-agent.wolkenservicedesk.com/*
