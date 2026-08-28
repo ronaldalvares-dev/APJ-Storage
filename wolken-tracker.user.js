@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         APJ Storage Wolken Prompt Tracker
 // @namespace    http://tampermonkey.net/
-// @version      1.0
-// @description  Differentiates Store Browsing from Execute Actions flawlessly
+// @version      1.1
+// @description  Differentiates Store Browsing from Execute Actions flawlessly using DOM attributes
 // @match        *://*.wolkenservicedesk.com/*
 // @match        *://broadcomcms-software-agent.wolkenservicedesk.com/*
 // @run-at       document-idle
@@ -108,6 +108,7 @@
         return data;
     }
 
+    // Webhook Dispatcher
     function sendToSheet(caseData) {
         if (caseData.caseId === "Not Found") {
             console.log("⏭️ [TRACKER] Ignored empty data trigger.");
@@ -146,8 +147,19 @@
 
         let contextHasStoreSignatures = false;
         let contextHasUseBtnText = false;
-        let contextHasTargetName = false;
+        let isTargetPromptRow = false;
 
+        // 1. Precision check: Use the DOM attributes to verify the exact prompt clicked
+        let targetButton = e.target.closest && e.target.closest('button');
+        let targetRow = e.target.closest && e.target.closest('.ath-personal-row');
+
+        if (targetButton && targetButton.getAttribute('data-prompt-id') === 'shared_kcs_case_owner_responsibilities') {
+            isTargetPromptRow = true;
+        } else if (targetRow && targetRow.getAttribute('data-id') === 'shared_kcs_case_owner_responsibilities') {
+            isTargetPromptRow = true;
+        }
+
+        // 2. Identify what was actually clicked
         for (let i = 0; i < Math.min(path.length, 4); i++) {
             let node = path[i];
             if (node && node.nodeType === 1) {
@@ -159,6 +171,7 @@
             }
         }
 
+        // 3. Scan for broader context to prevent false favorites
         for (let i = 0; i < Math.min(path.length, 10); i++) {
             let node = path[i];
             if (node && node.nodeType === 1) {
@@ -166,17 +179,17 @@
 
                 if (text.includes("Duplicate") || text.includes("FEATURED")) contextHasStoreSignatures = true;
                 if (text.includes("Use")) contextHasUseBtnText = true;
-                if (text.includes(TARGET_PROMPT_NAME)) contextHasTargetName = true;
             }
         }
 
         let shouldFire = false;
 
-        if (isUseButton && contextHasTargetName) {
+        // 4. Dispatch Logic
+        if (isUseButton && isTargetPromptRow) {
             shouldFire = true;
             console.log("🎯 [TRACKER] 'Use' list button clicked!");
         }
-        else if (isUseThisPromptButton && (contextHasTargetName || document.body.innerText.includes(TARGET_PROMPT_NAME))) {
+        else if (isUseThisPromptButton && (isTargetPromptRow || document.body.innerText.includes(TARGET_PROMPT_NAME))) {
             shouldFire = true;
             console.log("🎯 [TRACKER] 'Use this Prompt' details button clicked!");
         }
